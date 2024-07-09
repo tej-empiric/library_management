@@ -15,19 +15,19 @@ from rest_framework.parsers import JSONParser
 from django.http import HttpResponse, JsonResponse
 
 
-class IsAdminOrOwner(permissions.BasePermission):
+# class IsAdminOrOwner(permissions.BasePermission):
 
-    def has_object_permission(self, request, view, obj):
-        if request.user and request.user.is_staff:
-            return True
+#     def has_object_permission(self, request, view, obj):
+#         if request.user and request.user.is_staff:
+#             return True
 
-        if request.method in permissions.SAFE_METHODS:
-            return obj.user == request.user
+#         if request.method in permissions.SAFE_METHODS:
+#             return obj.user == request.user
 
-        if request.method == "PATCH":
-            return obj.user == request.user and request.data.get("return_date")
+#         if request.method == "PATCH":
+#             return obj.user == request.user and request.data.get("return_date")
 
-        return False
+#         return False
 
 
 class RegisterView(generics.CreateAPIView):
@@ -119,3 +119,75 @@ class BookDetailView(generics.RetrieveAPIView):
     queryset = Book.objects.all()
     serializer_class = BookSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+
+class BorrowBookView(generics.CreateAPIView):
+    serializer_class = BorrowedBooksSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        book_id = request.data.get("book")
+
+        try:
+            book = Book.objects.get(pk=book_id)
+        except Book.DoesNotExist:
+            return Response({"error": "Book does not exist"})
+
+        if book.is_available == False:
+            return Response({"Book is not available to borrow."})
+
+        borrowed_book = BorrowedBooks.objects.create(user=self.request.user, book=book)
+
+        serializer = self.get_serializer(borrowed_book)
+
+        book.is_available = False
+        book.save()
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class ReturnBookView(generics.UpdateAPIView):
+    queryset = BorrowedBooks.objects.all()
+    serializer_class = BorrowedBooksSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        new_return_date = request.data.get("return_date")
+
+        if new_return_date is not None and new_return_date >= instance.borrow_date:
+            instance.return_date = new_return_date
+            instance.save()
+        else:
+            return Response({"error": "Please enter a return date."})
+
+        serializer = self.get_serializer(instance)
+
+        book = instance.book
+        book.is_available = True
+        book.save()
+
+        # TODO: notify user who has reserved the book. django chl
+
+        return Response(serializer.data)
+
+
+class ListBorrowedBooksView(generics.ListAPIView):
+    queryset = BorrowedBooks.objects.all()
+    serializer_class = BorrowedBooksSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        if self.request.user.is_staff:
+            return BorrowedBooks.objects.all().order_by("-borrow_date")
+        else:
+            return BorrowedBooks.objects.filter(user=self.request.user).order_by(
+                "-borrow_date"
+            )
+
+
+# reservation class
+
+# # notification class(generics.ListAPIView):
+#    def get_queryset(self):
+#         return Notification.objects.filter(user=self.request.user).order_by("-created_at")

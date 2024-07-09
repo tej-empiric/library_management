@@ -122,3 +122,9 @@ class BookSerializer(serializers.ModelSerializer):
     class Meta:
         model = Book
         fields = "__all__"
+
+
+class BorrowedBooksSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BorrowedBooks
+        fields = "__all__"

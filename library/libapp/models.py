@@ -83,7 +83,11 @@ class BorrowedBooks(models.Model):
         if not self.id:
             self.due_date = self.borrow_date + timedelta(days=10)
         super(BorrowedBooks, self).save(*args, **kwargs)
-    
 
     class Meta:
         ordering = ["-borrow_date"]
+
+
+# bookreservation class
+
+# notification class, django signals.

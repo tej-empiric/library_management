@@ -18,4 +18,7 @@ urlpatterns = [
     path("book/delete/<int:pk>/", BookDeleteView.as_view(), name="book_delete"),
     path("book/list/", BookListView.as_view(), name="book_list"),
     path("book/detail/<int:pk>/", BookDetailView.as_view(), name="book_detail"),
+    path("borrow/", BorrowBookView.as_view(), name="borrow_book"),
+    path("return/<int:pk>/", ReturnBookView.as_view(), name="return_book"),
+    path("list/borrowed/", ListBorrowedBooksView.as_view(), name="list_borrowed_books"),
 ]
