@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.db import models
+from datetime import timedelta
 
 
 class CustomUserManager(BaseUserManager):
@@ -39,6 +40,50 @@ class CustomUser(AbstractBaseUser):
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
 
+    class Meta:
+        ordering = ["username"]
+
     def __str__(self):
         return self.email
 
+
+class Book(models.Model):
+    genrechoice = [
+        ("education", "Education"),
+        ("comics", "Comics"),
+        ("biography", "Biography"),
+        ("history", "History"),
+        ("science", "Science"),
+        ("engineering", "Engineering"),
+        ("medicine", "Medicine"),
+        ("commerce", "Commerce"),
+        ("arts", "Arts"),
+        ("maths", "Maths"),
+        ("language", "Language"),
+    ]
+    title = models.CharField(max_length=50)
+    author = models.CharField(max_length=50)
+    isbn = models.CharField(max_length=13, unique=True)
+    publication_date = models.DateField()
+    genre = models.CharField(max_length=30, choices=genrechoice, default="education")
+    is_available = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["title"]
+
+
+class BorrowedBooks(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    book = models.ForeignKey(Book, on_delete=models.CASCADE)
+    borrow_date = models.DateField(auto_now_add=True)
+    due_date = models.DateField()
+    return_date = models.DateField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            self.due_date = self.borrow_date + timedelta(days=10)
+        super(BorrowedBooks, self).save(*args, **kwargs)
+    
+
+    class Meta:
+        ordering = ["-borrow_date"]
