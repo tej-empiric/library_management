@@ -128,3 +128,10 @@ class BorrowedBooksSerializer(serializers.ModelSerializer):
     class Meta:
         model = BorrowedBooks
         fields = "__all__"
+
+
+class BookReservationSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = BookReservation
+        fields = "__all__"

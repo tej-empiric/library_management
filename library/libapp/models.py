@@ -78,6 +78,7 @@ class BorrowedBooks(models.Model):
     borrow_date = models.DateField(auto_now_add=True)
     due_date = models.DateField()
     return_date = models.DateField(null=True, blank=True)
+    is_return = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         if not self.id:
@@ -89,5 +90,9 @@ class BorrowedBooks(models.Model):
 
 
 # bookreservation class
+class BookReservation(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    book = models.ForeignKey(Book, on_delete=models.CASCADE)
+    reserved_at = models.DateTimeField(auto_now_add=True)
 
 # notification class, django signals.
