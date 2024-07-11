@@ -67,7 +67,7 @@ class Book(models.Model):
     publication_date = models.DateField()
     genre = models.CharField(max_length=30, choices=genrechoice, default="education")
     is_available = models.BooleanField(default=True)
-
+    
     class Meta:
         ordering = ["title"]
 
@@ -89,10 +89,8 @@ class BorrowedBooks(models.Model):
         ordering = ["-borrow_date"]
 
 
-# bookreservation class
 class BookReservation(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     book = models.ForeignKey(Book, on_delete=models.CASCADE)
     reserved_at = models.DateTimeField(auto_now_add=True)
 
-# notification class, django signals.

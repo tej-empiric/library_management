@@ -13,21 +13,14 @@ from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework import views
 from rest_framework.parsers import JSONParser
 from django.http import HttpResponse, JsonResponse
+from django.core.mail import send_mail
 from datetime import datetime
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 
-# class IsAdminOrOwner(permissions.BasePermission):
-
-#     def has_object_permission(self, request, view, obj):
-#         if request.user and request.user.is_staff:
-#             return True
-
-#         if request.method in permissions.SAFE_METHODS:
-#             return obj.user == request.user
-
-#         if request.method == "PATCH":
-#             return obj.user == request.user and request.data.get("return_date")
-
-#         return False
+env_path = Path(".") / ".env"
+load_dotenv(dotenv_path=env_path)
 
 
 class RegisterView(generics.CreateAPIView):
@@ -50,8 +43,8 @@ class LogoutView(APIView):
     def post(self, request):
         try:
             refresh_token = request.data["refresh_token"]
-            refreshToken = RefreshToken(refresh_token)
-            refreshToken.blacklist()
+            Token = RefreshToken(refresh_token)
+            Token.blacklist()
 
             return Response(
                 {"Log out successfull."}, status=status.HTTP_205_RESET_CONTENT
@@ -93,7 +86,7 @@ class UserDetailView(generics.ListAPIView):
 
 
 class UserUpdateView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = UserSerializer
+    serializer_class = UserUpdateSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
@@ -142,16 +135,26 @@ class BorrowBookView(generics.CreateAPIView):
 
         try:
             book = Book.objects.get(pk=book_id)
-        except Book.DoesNotExist:
+        except:
             return Response({"error": "Book does not exist"})
 
         try:
             user = CustomUser.objects.get(pk=user_id)
-        except Book.DoesNotExist:
+        except:
             return Response({"error": "User does not exist"})
 
         if book.is_available == False:
             return Response({"Book is not available to borrow."})
+
+        try:
+            total_borrowed_books = BorrowedBooks.objects.filter(
+                user=user, is_return=False
+            ).count()
+        except:
+            total_borrowed_books = 0
+
+        if total_borrowed_books == 2:
+            return Response({"Member Can only borrow max 2 books."})
 
         borrowed_book = BorrowedBooks.objects.create(
             user=user, book=book, borrow_date=datetime.now().date()
@@ -161,6 +164,12 @@ class BorrowBookView(generics.CreateAPIView):
 
         book.is_available = False
         book.save()
+
+        try:
+            reservation = BookReservation.objects.get(book=book, user=user)
+            reservation.delete()
+        except BookReservation.DoesNotExist:
+            pass
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -173,33 +182,47 @@ class ReturnBookView(generics.UpdateAPIView):
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
         new_return_date = request.data.get("return_date")
-        print("new_return_date: ", new_return_date)
 
         if new_return_date is not None:
             try:
                 new_return_date = datetime.strptime(new_return_date, "%Y-%m-%d").date()
             except ValueError:
-                return Response({"error": "Please enter a return date."})
+                return Response({"error": "Please enter a valid return date."})
 
             if new_return_date >= instance.borrow_date:
                 instance.return_date = new_return_date
                 instance.is_return = True
                 instance.save()
+
+                serializer = self.get_serializer(instance)
+
+                book = instance.book
+                book.is_available = True
+                book.save()
+
+                # email notification
+                try:
+                    reservation = BookReservation.objects.filter(book=instance.book)
+                    if reservation:
+                        try:
+                            send_mail(
+                                "Book Available Notification",
+                                f'The book "{instance.book.title}" is now available for borrowing.',
+                                os.getenv("EMAIL_HOST_USER"),
+                                [reservation.user.email],
+                                fail_silently=False,
+                            )
+                        except Exception:
+                            return Response({"error": "Sending Email Failed."})
+
+                except BookReservation.DoesNotExist:
+                    pass
+
+                return Response(serializer.data)
             else:
-                return Response({"Please enter date after borrow date."})
-
+                return Response({"error": "Return date must be after borrow date."})
         else:
-            return Response({"error": "Please enter a return date."})
-
-        serializer = self.get_serializer(instance)
-
-        book = instance.book
-        book.is_available = True
-        book.save()
-
-        # TODO: notify user who has reserved the book. django signals
-
-        return Response(serializer.data)
+            return Response({"error": "Please provide a return date."})
 
 
 class ListBorrowedBooksView(generics.ListAPIView):
@@ -216,7 +239,6 @@ class ListBorrowedBooksView(generics.ListAPIView):
             return BorrowedBooks.objects.filter(user=self.request.user).order_by("-id")
 
 
-# reservation class
 class ReserveBookView(generics.CreateAPIView):
     serializer_class = BookReservationSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -226,11 +248,18 @@ class ReserveBookView(generics.CreateAPIView):
 
         try:
             book = Book.objects.get(pk=book_id)
-        except Book.DoesNotExist:
+        except:
             return Response({"error": "Book does not exist"})
 
         if book.is_available == True:
             return Response({"No need to reserve Book, it is already available."})
+
+        try:
+            reserved_book = BookReservation.objects.get(book=book)
+            if reserved_book:
+                return Response({"Book is already reserved."})
+        except BookReservation.DoesNotExist:
+            pass
 
         reserve_book = BookReservation.objects.create(
             user=self.request.user,
@@ -254,9 +283,3 @@ class ListReserveBookView(generics.ListAPIView):
             return BookReservation.objects.all().order_by("id")
         else:
             return BookReservation.objects.filter(user=self.request.user).order_by("id")
-
-
-#  notification class(generics.ListAPIView):
-#    def get_queryset(self):
-#         return Notification.objects.filter(user=self.request.user, read=False).order_by("-created_at")
-# first show the notification than make it read=True

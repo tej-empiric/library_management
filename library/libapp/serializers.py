@@ -103,6 +103,7 @@ class StaffSerializer(serializers.ModelSerializer):
             "last_name",
             "email",
             "is_staff",
+            "role",
         ]
 
 
@@ -111,6 +112,18 @@ class UserSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = [
             "id",
+            "username",
+            "first_name",
+            "last_name",
+            "email",
+            "role",
+        ]
+
+
+class UserUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = [
             "username",
             "first_name",
             "last_name",
