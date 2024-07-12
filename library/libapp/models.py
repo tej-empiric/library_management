@@ -61,7 +61,7 @@ class Book(models.Model):
         ("maths", "Maths"),
         ("language", "Language"),
     ]
-    title = models.CharField(max_length=50)
+    title = models.CharField(max_length=50, unique=True)
     author = models.CharField(max_length=50)
     isbn = models.CharField(max_length=13, unique=True)
     publication_date = models.DateField()

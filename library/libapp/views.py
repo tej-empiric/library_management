@@ -99,6 +99,13 @@ class BookDeleteView(generics.DestroyAPIView):
     serializer_class = BookSerializer
     permission_classes = [permissions.IsAdminUser]
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(
+            {"Book deleted successfully"}, status=status.HTTP_204_NO_CONTENT
+        )
+
 
 class BookListView(generics.ListAPIView):
     queryset = Book.objects.all()
@@ -130,6 +137,8 @@ class BorrowBookView(generics.CreateAPIView):
 
         try:
             user = CustomUser.objects.get(pk=user_id)
+            if user.role != "member":
+                return Response({"error": "Only member can borrow book."})
         except:
             return Response({"error": "User does not exist"})
 
@@ -171,48 +180,48 @@ class ReturnBookView(generics.UpdateAPIView):
 
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
-        new_return_date = request.data.get("return_date")
+        new_return_date = datetime.now().date()
 
-        if new_return_date is not None:
-            try:
-                new_return_date = datetime.strptime(new_return_date, "%Y-%m-%d").date()
-            except ValueError:
-                return Response({"error": "Please enter a valid return date."})
+        if instance.is_return != True:
+            if new_return_date is not None:
+                if new_return_date >= instance.borrow_date:
+                    instance.return_date = new_return_date
+                    instance.is_return = True
+                    instance.save()
 
-            if new_return_date >= instance.borrow_date:
-                instance.return_date = new_return_date
-                instance.is_return = True
-                instance.save()
+                    serializer = self.get_serializer(instance)
 
-                serializer = self.get_serializer(instance)
+                    book = instance.book
+                    book.is_available = True
+                    book.save()
 
-                book = instance.book
-                book.is_available = True
-                book.save()
+                    # email notification
+                    try:
+                        reservation = BookReservation.objects.get(book=instance.book)
 
-                # email notification
-                try:
-                    reservation = BookReservation.objects.filter(book=instance.book)
-                    if reservation:
-                        try:
-                            send_mail(
-                                "Book Available Notification",
-                                f'The book "{instance.book.title}" is now available for borrowing.',
-                                os.getenv("EMAIL_HOST_USER"),
-                                [reservation.user.email],
-                                fail_silently=False,
-                            )
-                        except Exception:
-                            return Response({"error": "Sending Email Failed."})
+                        if reservation:
+                            try:
+                                send_mail(
+                                    "Book Available Notification",
+                                    f'The book "{instance.book.title}" is now available for borrowing.',
+                                    os.getenv("EMAIL_HOST_USER"),
+                                    [reservation.user.email],
+                                    fail_silently=False,
+                                )
+                            except Exception as e:
+                                print(str(e))
+                                return Response({"error": "Sending Email Failed."})
 
-                except BookReservation.DoesNotExist:
-                    pass
+                    except BookReservation.DoesNotExist:
+                        pass
 
-                return Response(serializer.data)
+                    return Response(serializer.data, status=status.HTTP_201_CREATED)
+                else:
+                    return Response({"error": "Return date must be after borrow date."})
             else:
-                return Response({"error": "Return date must be after borrow date."})
+                return Response({"error": "Please provide a return date."})
         else:
-            return Response({"error": "Please provide a return date."})
+            return Response({"error": "Book is already returned."})
 
 
 class ListBorrowedBooksView(generics.ListAPIView):
