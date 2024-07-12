@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError, ObjectDoesNotExist
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
+    password2 = serializers.CharField(write_only=True)
 
     class Meta:
         model = CustomUser
@@ -19,10 +20,20 @@ class RegisterSerializer(serializers.ModelSerializer):
             "last_name",
             "email",
             "password",
+            "password2",
             "role",
         ]
 
+    def validate(self, attrs):
+        if attrs["password"] != attrs["password2"]:
+            raise serializers.ValidationError(
+                {"password": "Password fields didn't match."}
+            )
+
+        return attrs
+
     def validate_password(self, value):
+
         try:
             validate_password(value)
         except ValidationError as e:
@@ -53,8 +64,11 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop("password")
+        password2 = validated_data.pop("password2")
         user = CustomUser.objects.create(**validated_data)
         user.set_password(password)
+        if user.role == "staff":
+            user.is_active = False
         user.save()
         return user
 
@@ -103,6 +117,7 @@ class StaffSerializer(serializers.ModelSerializer):
             "last_name",
             "email",
             "is_staff",
+            "is_active",
             "role",
         ]
 

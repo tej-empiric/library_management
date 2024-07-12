@@ -2,18 +2,16 @@ from rest_framework.response import Response
 from rest_framework import generics
 from rest_framework.filters import SearchFilter
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import status, viewsets, permissions, generics
+from rest_framework import status, permissions, generics
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import *
-from .serializers import *
 from rest_framework.views import APIView
-from rest_framework.exceptions import ValidationError, PermissionDenied
-from rest_framework import views
-from rest_framework.parsers import JSONParser
-from django.http import HttpResponse, JsonResponse
+from .serializers import *
+from django.http import JsonResponse
 from django.core.mail import send_mail
+from .permissions import *
 from datetime import datetime
 import os
 from pathlib import Path
@@ -57,21 +55,15 @@ class LogoutView(APIView):
 
 
 class StaffView(generics.ListAPIView):
+    queryset = CustomUser.objects.filter(role="staff")
     serializer_class = StaffSerializer
-    permission_classes = [permissions.IsAdminUser]
-
-    def get_queryset(self):
-        user = self.request.user
-        if user.is_superuser == True:
-            return CustomUser.objects.filter(role="staff")
-        else:
-            raise PermissionDenied("You do not have permission to perform this action.")
+    permission_classes = [IsSuperUser]
 
 
 class StaffUpdateView(generics.RetrieveUpdateDestroyAPIView):
     queryset = CustomUser.objects.filter(role="staff")
     serializer_class = StaffSerializer
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsSuperUser]
 
 
 class UserDetailView(generics.ListAPIView):
@@ -86,11 +78,9 @@ class UserDetailView(generics.ListAPIView):
 
 
 class UserUpdateView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = CustomUser.objects.all()
     serializer_class = UserUpdateSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return CustomUser.objects.filter(email=self.request.user)
+    permission_classes = [IsOwner]
 
 
 class BookAddView(generics.CreateAPIView):
@@ -241,7 +231,7 @@ class ListBorrowedBooksView(generics.ListAPIView):
 
 class ReserveBookView(generics.CreateAPIView):
     serializer_class = BookReservationSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsMember]
 
     def create(self, request, *args, **kwargs):
         book_id = request.data.get("book_id")
@@ -249,7 +239,7 @@ class ReserveBookView(generics.CreateAPIView):
         try:
             book = Book.objects.get(pk=book_id)
         except:
-            return Response({"error": "Book does not exist"})
+            return JsonResponse({"error": "Book does not exist"})
 
         if book.is_available == True:
             return Response({"No need to reserve Book, it is already available."})
